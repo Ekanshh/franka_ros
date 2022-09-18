@@ -36,7 +36,8 @@
   <depend>franka_example_controllers</depend>
   <depend>urdf</depend>
   <depend>angles</depend>
-
+  <!--#RnD: Custom Controller from TU-Delft-->
+  <depend>franka_human_friendly_controllers</depend> 
   <test_depend>gtest</test_depend>
   <test_depend>rostest</test_depend>
   <test_depend>sensor_msgs</test_depend>

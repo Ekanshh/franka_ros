@@ -35,6 +35,7 @@ find_package(catkin REQUIRED COMPONENTS
   franka_msgs
   franka_gripper
   franka_example_controllers
+  franka_human_friendly_controllers   #RnD: Custom Controller from TU-Delft 
 )
 find_package(Franka 0.9.0 QUIET)
 if(NOT Franka_FOUND)
@@ -66,6 +67,7 @@ catkin_package(
   INCLUDE_DIRS include
   LIBRARIES franka_hw_sim franka_gripper_sim
   DEPENDS Franka orocos_kdl
+  franka_human_friendly_controllers   #RnD: Custom Controller from TU-Delft
 )
 
 link_directories(
