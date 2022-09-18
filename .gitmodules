@@ -1,0 +1,3 @@
+[submodule "franka_human_friendly_controllers"]
+	path = franka_human_friendly_controllers
+	url = git@github.com:Ekanshh/franka_ros.git
