@@ -23,6 +23,7 @@ find_package(catkin REQUIRED COMPONENTS
   rospy
   urdf
   visualization_msgs
+  oae_msgs
 )
 
 find_package(Eigen3 REQUIRED)
@@ -84,6 +85,7 @@ add_library(franka_example_controllers
   src/dual_arm_cartesian_impedance_example_controller.cpp
   src/teleop_joint_pd_example_controller.cpp
   src/joint_wall.cpp
+  src/augmented_cartesian_impedance_example_controller.cpp
 )
 
 add_dependencies(franka_example_controllers
