@@ -205,9 +205,6 @@ void AugmentedCartesianImpedanceExampleController::update(const ros::Time& /*tim
   Eigen::Vector3d position(transform.translation());
   Eigen::Quaterniond orientation(transform.rotation());
 
-  // publish the cartesian wrench which is transformed to the end-effector frame
-  AugmentedCartesianImpedanceExampleController::pubWrench(transformed_cartesian_wrench_target_ee_, pub_cartesian_wrench_);
-
   // compute error to desired pose
   // position error
   Eigen::Vector3d position_error = position - position_d_;
@@ -254,11 +251,11 @@ void AugmentedCartesianImpedanceExampleController::update(const ros::Time& /*tim
   Eigen::Matrix<double, 6, 1> F;
   F << (-cartesian_stiffness_ * error_weighted - cartesian_damping_ * (jacobian * dq));
   
+  AugmentedCartesianImpedanceExampleController::pubWrench(-F, pub_directional_compliance_);
+
   // Compute task torques
   tau_task << jacobian.transpose() * F;
-                    
-  AugmentedCartesianImpedanceExampleController::pubWrench(tau_task, pub_directional_compliance_);
-
+                      
   // nullspace PD control with damping ratio = 1
   tau_nullspace << (Eigen::MatrixXd::Identity(7, 7) -
                     jacobian.transpose() * jacobian_transpose_pinv) *
@@ -453,10 +450,10 @@ void AugmentedCartesianImpedanceExampleController::updateTransformedWrench() {
 void AugmentedCartesianImpedanceExampleController::pubWrench(const Eigen::Matrix<double, 6, 1>& wrench, ros::Publisher& pub) {
   geometry_msgs::WrenchStamped msg;
   msg.header.stamp = ros::Time::now();
-  msg.header.frame_id = wrench_ee_frame_id_;
-  msg.wrench.force.x = wrench(0);
-  msg.wrench.force.y = wrench(1);
-  msg.wrench.force.z = wrench(2);
+  msg.header.frame_id = "panda_EE";
+  msg.wrench.force.x = wrench(1);
+  msg.wrench.force.y = wrench(2);
+  msg.wrench.force.z = wrench(0);
   msg.wrench.torque.x = wrench(3);
   msg.wrench.torque.y = wrench(4);
   msg.wrench.torque.z = wrench(5);
@@ -483,7 +480,7 @@ void AugmentedCartesianImpedanceExampleController::directionalComplianceCallback
     Eigen::Matrix3d rot_weights = Eigen::Matrix3d::Zero();
 
     // Set weights based on control flags (1.0 for controlled, small value for compliant)
-    const double COMPLIANT_WEIGHT = 1E-16;  // More compliant when false
+    const double COMPLIANT_WEIGHT = 0.0;  // More compliant when false
     
     for (size_t i = 0; i < 3; ++i) {
         pos_weights(i,i) = msg->position_control[i] ? 1.0 : COMPLIANT_WEIGHT;
