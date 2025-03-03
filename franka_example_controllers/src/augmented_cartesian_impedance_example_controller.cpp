@@ -43,6 +43,9 @@ bool AugmentedCartesianImpedanceExampleController::init(hardware_interface::Robo
 
   pub_cartesian_wrench_ = node_handle.advertise<geometry_msgs::WrenchStamped>("current_commanded_wrench", 10);
 
+  pub_residual_wrench_ = node_handle.advertise<geometry_msgs::WrenchStamped>("residual_wrench", 10);
+
+
   // Directional compliance control
   sub_directional_compliance_ = node_handle.subscribe(
       "equilibrium_pose/selective", 20, &AugmentedCartesianImpedanceExampleController::directionalComplianceCallback, this,
@@ -251,7 +254,35 @@ void AugmentedCartesianImpedanceExampleController::update(const ros::Time& /*tim
   Eigen::Matrix<double, 6, 1> F;
   F << (-cartesian_stiffness_ * error_weighted - cartesian_damping_ * (jacobian * dq));
   
-  AugmentedCartesianImpedanceExampleController::pubWrench(-F, pub_directional_compliance_);
+  // With this:
+  // First, create a WrenchStamped message in the root frame
+  // auto base_wrench_msg = std::make_shared<geometry_msgs::WrenchStamped>();
+  // base_wrench_msg->header.stamp = ros::Time::now();
+  // base_wrench_msg->header.frame_id = wrench_root_frame_id_; // This is your base frame
+  // base_wrench_msg->wrench.force.x = F(0);
+  // base_wrench_msg->wrench.force.y = F(1);
+  // base_wrench_msg->wrench.force.z = F(2);
+  // base_wrench_msg->wrench.torque.x = F(3);
+  // base_wrench_msg->wrench.torque.y = F(4);
+  // base_wrench_msg->wrench.torque.z = F(5);
+
+  // // Then transform it to EE frame and publish
+  // {
+  //   std::lock_guard<std::mutex> lock(transform_mutex_);
+  //   if (transform_valid_) {
+  //       // Transform from base to EE frame
+  //       Eigen::Matrix<double, 6, 1> ee_wrench = transformWrench(*base_wrench_msg, cached_transform_);
+        
+  //       // Publish to the visualization topic
+  //       pubWrench(ee_wrench, pub_directional_compliance_);
+  //   } else {
+  //       // If transform isn't valid, publish in base frame with a warning
+  //       ROS_WARN_THROTTLE(5.0, "Transform not valid, publishing wrench in base frame");
+  //       pubWrench(F, pub_directional_compliance_);
+  //   }
+  // }
+
+  calculateAndPublishResiduals(F);
 
   // Compute task torques
   tau_task << jacobian.transpose() * F;
@@ -450,10 +481,10 @@ void AugmentedCartesianImpedanceExampleController::updateTransformedWrench() {
 void AugmentedCartesianImpedanceExampleController::pubWrench(const Eigen::Matrix<double, 6, 1>& wrench, ros::Publisher& pub) {
   geometry_msgs::WrenchStamped msg;
   msg.header.stamp = ros::Time::now();
-  msg.header.frame_id = "panda_EE";
-  msg.wrench.force.x = wrench(1);
-  msg.wrench.force.y = wrench(2);
-  msg.wrench.force.z = wrench(0);
+  msg.header.frame_id = wrench_ee_frame_id_;
+  msg.wrench.force.x = wrench(0);
+  msg.wrench.force.y = wrench(1);
+  msg.wrench.force.z = wrench(2);
   msg.wrench.torque.x = wrench(3);
   msg.wrench.torque.y = wrench(4);
   msg.wrench.torque.z = wrench(5);
@@ -497,6 +528,49 @@ void AugmentedCartesianImpedanceExampleController::directionalComplianceCallback
     using_selective_weight_ = true;
     
     ROS_DEBUG("Updated selective weight matrix");
+}
+
+void AugmentedCartesianImpedanceExampleController::calculateAndPublishResiduals(
+    const Eigen::Matrix<double, 6, 1>& expected_wrench) {
+  
+  // Get the current external force estimate
+  franka::RobotState robot_state = state_handle_->getRobotState();
+  Eigen::Map<Eigen::Matrix<double, 6, 1>> measured_wrench(robot_state.O_F_ext_hat_K.data());
+  
+  // Note: measured_wrench is forces applied BY THE ENVIRONMENT TO THE ROBOT (negative by convention)
+  // expected_wrench is forces the controller commands the robot to apply (positive by convention)
+  // For comparison, we need to negate one of them to match conventions
+  
+  // Calculate residual as the difference between measured and expected
+  // Adding a negative sign to account for the convention difference
+  Eigen::Matrix<double, 6, 1> new_residual = measured_wrench + expected_wrench;
+  
+  // Apply low-pass filter to smooth residuals
+  residual_wrench_ = residual_filter_factor_ * residual_wrench_ + 
+                    (1.0 - residual_filter_factor_) * new_residual;
+  
+  // Create a WrenchStamped message in the K frame (end-effector)
+  auto residual_msg = std::make_shared<geometry_msgs::WrenchStamped>();
+  residual_msg->header.stamp = ros::Time::now();
+  residual_msg->header.frame_id = wrench_root_frame_id_; // End-effector frame
+  residual_msg->wrench.force.x = residual_wrench_(0);
+  residual_msg->wrench.force.y = residual_wrench_(1);
+  residual_msg->wrench.force.z = residual_wrench_(2);
+  residual_msg->wrench.torque.x = residual_wrench_(3);
+  residual_msg->wrench.torque.y = residual_wrench_(4);
+  residual_msg->wrench.torque.z = residual_wrench_(5);
+
+  {
+    // Transform to visualization frame if needed
+    std::lock_guard<std::mutex> lock(transform_mutex_);
+    if (transform_valid_) {
+      // Transform from base to EE frame
+      Eigen::Matrix<double, 6, 1> ee_residual_wrench = transformWrench(*residual_msg, cached_transform_);
+      pubWrench(ee_residual_wrench, pub_residual_wrench_);
+    } else {
+      ROS_WARN_THROTTLE(5.0, "Transform not valid for residual wrench, not publishing");
+    }
+  }
 }
 
 }  // namespace franka_example_controllers

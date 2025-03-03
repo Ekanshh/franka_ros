@@ -119,6 +119,14 @@ class AugmentedCartesianImpedanceExampleController : public controller_interface
   ros::Subscriber sub_directional_compliance_;
   ros::Publisher pub_directional_compliance_;
   void directionalComplianceCallback(const oae_msgs::DirectionalComplianceConstPtr& msg);
+
+  // For residual force visualization
+  ros::Publisher pub_residual_wrench_;
+  Eigen::Matrix<double, 6, 1> residual_wrench_;
+  double residual_filter_factor_{0.001}; // Filter factor to smooth residuals
+
+  void calculateAndPublishResiduals(const Eigen::Matrix<double, 6, 1>& wrench);
+  
 };
 
 }  // namespace franka_example_controllers
