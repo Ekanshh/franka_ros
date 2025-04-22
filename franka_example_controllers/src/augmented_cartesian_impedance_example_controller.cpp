@@ -227,7 +227,7 @@ void AugmentedCartesianImpedanceExampleController::update(const ros::Time& /*tim
   // Transform to base frame
   error.tail(3) << -transform.rotation() * error.tail(3);
 
-   // Convert orientation error to rotation matrix (R = q2R(e[3:]))
+  // Convert orientation error to rotation matrix (R = q2R(e[3:]))
   Eigen::Matrix3d R = error_quaternion.toRotationMatrix();
   
   // Create augmented rotation matrix (R_augm = [R, zeros(); zeros(), R])
@@ -540,37 +540,23 @@ void AugmentedCartesianImpedanceExampleController::calculateAndPublishResiduals(
   // Note: measured_wrench is forces applied BY THE ENVIRONMENT TO THE ROBOT (negative by convention)
   // expected_wrench is forces the controller commands the robot to apply (positive by convention)
   // For comparison, we need to negate one of them to match conventions
-  
+  measured_wrench = -measured_wrench;
+
   // Calculate residual as the difference between measured and expected
   // Adding a negative sign to account for the convention difference
-  Eigen::Matrix<double, 6, 1> new_residual = measured_wrench + expected_wrench;
-  
-  // Apply low-pass filter to smooth residuals
-  residual_wrench_ = residual_filter_factor_ * residual_wrench_ + 
-                    (1.0 - residual_filter_factor_) * new_residual;
-  
-  // Create a WrenchStamped message in the K frame (end-effector)
-  auto residual_msg = std::make_shared<geometry_msgs::WrenchStamped>();
-  residual_msg->header.stamp = ros::Time::now();
-  residual_msg->header.frame_id = wrench_root_frame_id_; // End-effector frame
-  residual_msg->wrench.force.x = residual_wrench_(0);
-  residual_msg->wrench.force.y = residual_wrench_(1);
-  residual_msg->wrench.force.z = residual_wrench_(2);
-  residual_msg->wrench.torque.x = residual_wrench_(3);
-  residual_msg->wrench.torque.y = residual_wrench_(4);
-  residual_msg->wrench.torque.z = residual_wrench_(5);
+  Eigen::Matrix<double, 6, 1> residual_wrench_ = measured_wrench - expected_wrench;
 
-  {
-    // Transform to visualization frame if needed
-    std::lock_guard<std::mutex> lock(transform_mutex_);
-    if (transform_valid_) {
-      // Transform from base to EE frame
-      Eigen::Matrix<double, 6, 1> ee_residual_wrench = transformWrench(*residual_msg, cached_transform_);
-      pubWrench(ee_residual_wrench, pub_residual_wrench_);
-    } else {
-      ROS_WARN_THROTTLE(5.0, "Transform not valid for residual wrench, not publishing");
-    }
-  }
+  geometry_msgs::WrenchStamped residual_msg;;
+  residual_msg.header.stamp = ros::Time::now();
+  residual_msg.header.frame_id = wrench_root_frame_id_; // End-effector frame
+  residual_msg.wrench.force.x = residual_wrench_(0);
+  residual_msg.wrench.force.y = residual_wrench_(1);
+  residual_msg.wrench.force.z = residual_wrench_(2);
+  residual_msg.wrench.torque.x = residual_wrench_(3);
+  residual_msg.wrench.torque.y = residual_wrench_(4);
+  residual_msg.wrench.torque.z = residual_wrench_(5);
+
+  pub_residual_wrench_.publish(residual_msg);
 }
 
 }  // namespace franka_example_controllers
