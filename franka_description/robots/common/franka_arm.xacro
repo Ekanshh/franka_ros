@@ -28,7 +28,7 @@
     </xacro:link_with_sc>
 
     <joint name="${arm_id}_joint1" type="revolute">
-      <origin rpy="0 0 0" xyz="0 0 0.333" />
+      <origin rpy="0 0 -1.5708" xyz="0 0 0.333" />
       <parent link="${arm_id}_link0" />
       <child link="${arm_id}_link1" />
       <axis xyz="0 0 1" />
